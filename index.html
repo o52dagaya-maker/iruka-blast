@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=1.1.2">
 </head>
 <body>
 <!-- タイトル -->
@@ -90,6 +90,17 @@
   </div>
 </div>
 
+<!-- 診断（バージョン表示を5回タップ） -->
+<div class="overlay" id="ovDebug" hidden>
+  <div class="panel menu">
+    <h2 style="text-align:left">診断情報</h2>
+    <p style="font-size:12px;margin:2px 0">この画面をスクリーンショットして送ってください</p>
+    <pre id="dbgText" class="dbg"></pre>
+    <div class="mfoot"><button class="big" id="dbgRefresh">更新</button><button class="big ghost" id="dbgClose">とじる</button></div>
+  </div>
+</div>
+<div id="errToast" class="errtoast" hidden></div>
+
 <!-- ごほうび -->
 <div class="overlay" id="ovGift" hidden>
   <div class="panel center">
@@ -138,14 +149,24 @@
   </div>
 </div>
 
-<script src="engine.js"></script>
-<script src="levels.js"></script>
-<script src="art.js"></script>
-<script src="music.js"></script>
-<script src="game.js"></script>
+<script src="engine.js?v=1.1.2"></script>
+<script src="levels.js?v=1.1.2"></script>
+<script src="art.js?v=1.1.2"></script>
+<script src="music.js?v=1.1.2"></script>
+<script src="game.js?v=1.1.2"></script>
 <script>
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(() => {}));
+  // always check for a new version (bypassing the HTTP cache) and switch to it as soon as it is installed
+  const hadSW = !!navigator.serviceWorker.controller; let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadSW || reloaded) return; reloaded = true;
+    try { window.__blast && window.__blast.appPause && window.__blast.appPause(); } catch (e) {}
+    location.reload();
+  });
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => {
+    r.update().catch(() => {});
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) r.update().catch(() => {}); });
+  }).catch(() => {}));
 }
 </script>
 </body>

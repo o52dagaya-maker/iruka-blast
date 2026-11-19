@@ -11,7 +11,8 @@ const ease = { lin: k => k, out: k => 1 - (1 - k) * (1 - k), inq: k => k * k, ba
 // ---------------------------------------------------------------- save
 const SAVE_KEY = 'irukaBlast.v1';
 const DEF = () => ({ stars: {}, best: {}, sound: true, bgm: true, bgmVol: 0.6, vib: true, fx: 'full', fast: false, inv: {}, got: {}, chest: 0 });
-const VERSION = '1.1.1', IS_APP = location.protocol === 'file:';
+const VERSION = '1.1.2', IS_APP = location.protocol === 'file:';
+if (IS_APP) document.documentElement.classList.add('app');
 function loadSave() { try { const v = Object.assign(DEF(), JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')); v.inv = v.inv || {}; v.got = v.got || {}; return v; } catch (e) { return DEF(); } }
 let SV = loadSave();
 function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(SV)); } catch (e) {} }
@@ -20,7 +21,32 @@ const starTotal = () => Object.values(SV.stars).reduce((a, b) => a + b, 0);
 
 // ---------------------------------------------------------------- audio (synthesized, no files)
 let AC = null, MG = null, NB = null;
+// iPhone/iPad: Web Audio is "ambient" by default, so the hardware silent (ring/mute) switch mutes ALL game sound
+// and BGM. Safari 16.4+/17: ask for a "playback" audio session. Older real iOS WebKit only: fall back to a tiny silent
+// looping <audio> element started inside a tap. Web only (the APK is file:// and never runs this); every step is guarded.
+const IOS = location.protocol !== 'file:' && (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+const IOS_REAL = IOS && typeof navigator.standalone === 'boolean'; // real iOS/iPadOS WebKit (Safari, home-screen app, in-app browsers); emulators lack it
+let iosEl = null, iosElFailed = false;
+function iosSession() {
+  if (!IOS) return;
+  try { if (navigator.audioSession) { if (navigator.audioSession.type !== 'playback') navigator.audioSession.type = 'playback'; return; } } catch (e) {}
+  if (!IOS_REAL || iosElFailed || document.hidden) return;
+  try {
+    if (!iosEl) { // created lazily on the first tap: 0.25 s of 8 kHz 8-bit silence (2 KB in-memory WAV, no file, no network)
+      const n = 2000, b = new Uint8Array(44 + n), v = new DataView(b.buffer), w = (o, s) => { for (let i = 0; i < s.length; i++) b[o + i] = s.charCodeAt(i); };
+      w(0, 'RIFF'); v.setUint32(4, 36 + n, true); w(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+      v.setUint32(24, 8000, true); v.setUint32(28, 8000, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true); w(36, 'data'); v.setUint32(40, n, true); b.fill(128, 44);
+      let s = ''; for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+      const el = document.createElement('audio'); el.setAttribute('playsinline', ''); el.setAttribute('x-webkit-airplay', 'deny');
+      el.preload = 'none'; el.loop = true; el.muted = false; el.onerror = () => { iosElFailed = true; };
+      el.src = 'data:audio/wav;base64,' + btoa(s); iosEl = el;
+    }
+    if (iosEl.paused) { const p = iosEl.play(); if (p && p.catch) p.catch(() => {}); }
+  } catch (e) { iosElFailed = true; }
+}
+function iosSessionSleep() { try { if (iosEl && !iosEl.paused) iosEl.pause(); } catch (e) {} }
 function unlockAudio() {
+  iosSession();
   try {
     if (!AC) { AC = new (window.AudioContext || window.webkitAudioContext)(); MG = AC.createGain(); MG.gain.value = 0.55; MG.connect(AC.destination);
       NB = AC.createBuffer(1, AC.sampleRate, AC.sampleRate); const d = NB.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
@@ -28,7 +54,8 @@ function unlockAudio() {
     const b = AC.createBuffer(1, 1, 22050), s = AC.createBufferSource(); s.buffer = b; s.connect(AC.destination); s.start(0);
   } catch (e) {}
 }
-['touchend', 'pointerdown', 'keydown'].forEach(t => document.addEventListener(t, () => { if (!AC || AC.state !== 'running') { unlockAudio(); if (BGM && AC) { bgmApply(); BGM.kick(); bgmFor(screen); } } }, { passive: true, capture: true }));
+const bgmWake = () => { if (BGM && AC) { bgmApply(); BGM.kick(); bgmFor(screen); } };
+['touchend', 'pointerdown', 'keydown', 'click'].forEach(t => document.addEventListener(t, () => { if (!AC || AC.state !== 'running') { unlockAudio(); bgmWake(); if (AC && AC.resume) { const pr = AC.resume(); if (pr && pr.then) pr.then(bgmWake, () => {}); } } else if (IOS_REAL && !navigator.audioSession && !iosElFailed && (!iosEl || iosEl.paused)) iosSession(); }, { passive: true, capture: true }));
 const sOK = () => SV.sound && AC && AC.state === 'running';
 const BGM = window.IrukaMusic ? IrukaMusic.Player(() => AC) : null;
 function bgmFor(name) { if (!BGM) return; if (name === 'game' && G) { const k = LV[LVN - 1].kind; BGM.play(k === 'boss' || k === 'bigboss' ? 'boss' : k === 'breather' ? 'rest' : 'level'); } else if (name === 'title' || name === 'map') BGM.play('map'); }
@@ -64,7 +91,9 @@ const SFX = {
 };
 // iOS: block page pinch zoom
 ['gesturestart', 'gesturechange'].forEach(t => document.addEventListener(t, e => e.preventDefault(), { passive: false }));
-document.addEventListener('touchmove', e => { if (e.touches.length > 1 || !e.target.closest('#mapScroll,.panel')) e.preventDefault(); }, { passive: false });
+// only block pinch here; single-finger scrolling is stopped by CSS touch-action on the game screen
+// (a page-wide touchmove preventDefault could swallow taps on buttons in some Android WebViews)
+document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 document.addEventListener('dblclick', e => e.preventDefault());
 
 // ---------------------------------------------------------------- screens
@@ -557,7 +586,7 @@ function buildBoostBar() {
   for (const k in BOOST) {
     const b = document.createElement('button'), ok = reached() >= BOOST[k].u; b.className = 'bst' + (ok ? '' : ' lock') + (mode === k ? ' on' : '') + (ok && !inv(k) ? ' zero' : ''); b.dataset.k = k;
     b.innerHTML = ICON[k] + `<span>${BOOST[k].n}</span>` + (ok ? `<span class="n">${inv(k)}</span>` : `<span class="n">🔒</span>`);
-    b.onclick = () => pickBoost(k); bar.appendChild(b);
+    fastTap(b, () => pickBoost(k)); bar.appendChild(b);
   }
 }
 function setMode(m) { mode = m; const t = $('modeTip'); t.textContent = m ? BOOST[m].tip + '（もう一度押すとやめる）' : ''; t.classList.toggle('show', !!m); buildBoostBar(); }
@@ -687,54 +716,100 @@ $('lMap').onclick = () => { SFX.tick(); closeOverlays(); show('map'); };
 // pause
 function pause() { if (screen !== 'game' || !G || G.status !== 'play' || paused) return; paused = true; if (BGM) BGM.pause(true); document.body.classList.add('paused'); $('pSound').checked = SV.sound; closeOverlays(); $('ovPause').hidden = false; }
 function resume() { paused = false; if (BGM) BGM.pause(false); document.body.classList.remove('paused'); $('ovPause').hidden = true; clearHint(); }
-$('gPause').onclick = () => { SFX.tick(); pause(); };
+fastTap($('gPause'), () => { SFX.tick(); pause(); });
 $('pResume').onclick = () => { SFX.tick(); resume(); };
 $('pRetry').onclick = () => { SFX.tick(); resume(); startLevel(LVN); };
 $('pMap').onclick = () => { SFX.tick(); resume(); playId++; G = null; show('map'); };
 $('pSound').onchange = e => { SV.sound = e.target.checked; persist(); };
 document.addEventListener('visibilitychange', () => { if (document.hidden) { pause(); persist(); appSleep(true); } else appSleep(false); });
 // app/background: silence everything (Android wrapper calls these from onPause/onResume)
-function appSleep(v) { try { if (BGM) BGM.pause(v || paused); if (AC) { if (v) AC.suspend(); else AC.resume().catch(() => {}); } } catch (e) {} }
+function appSleep(v) { try { if (v) iosSessionSleep(); if (BGM) BGM.pause(v || paused); if (AC) { if (v) AC.suspend(); else AC.resume().then(() => { if (BGM) { BGM.kick(); BGM.pause(paused); } }, () => {}); } } catch (e) {} }
 
 // input
 // tap = blast the group; swipe = swap with the neighbour (both work everywhere).
-// Pointer events first; raw touch events as a fallback for WebViews that drop pointer events.
-// The gesture is decided as soon as the finger travels SWIPE cells, or on release / cancel.
+// Pointer events AND touch events both feed ONE gesture: whichever stream reports first starts it, every move from
+// either stream updates it, and the first release finishes it. So if a WebView cancels or drops one stream
+// (pointercancel, lost capture, missing pointermove), the other one still completes the swipe.
 const SWIPE = 0.3;
-let gest = null, lastPtrTime = 0;
+let gest = null;
 const xyOf = (cx0, cy0) => { const r0 = cv.getBoundingClientRect(); const x = cx0 - r0.left, y = cy0 - r0.top; return [Math.floor((y - OY) / CS), Math.floor((x - OX) / CS), x, y]; };
-function gStart(src, id, X, Y) {
+function gStart(X, Y) {
   if (!$('skipBtn').hidden) { skipBonus(); return false; }
-  if (!G || gest) return false; const [r, c, x, y] = xyOf(X, Y);
-  if (r < 0 || c < 0 || r >= G.H || c >= G.W) return false;
-  gest = { src, id, r, c, x, y, done: false }; hover = [r, c]; return true;
+  const now = performance.now();
+  if (gest && now - gest.last < 700) return true;            // same finger, reported by the other stream
+  if (!G) return false; const [r, c, x, y] = xyOf(X, Y);
+  if (r < 0 || c < 0 || r >= G.H || c >= G.W) { gest = null; return false; }
+  gest = { r, c, x, y, done: false, last: now }; hover = [r, c]; return true;
 }
-function gMove(src, id, X, Y) {
+function gMove(X, Y) {
   const [r, c, x, y] = xyOf(X, Y); if (mode) hover = [r, c];
-  if (!gest || gest.src !== src || gest.id !== id || gest.done || mode) return;
+  if (!gest || gest.done || mode) return; gest.last = performance.now();
   const dx = x - gest.x, dy = y - gest.y, th = CS * SWIPE;
   if (Math.abs(dx) < th && Math.abs(dy) < th) return;
   gest.done = true; const g = gest;
   const [tr, tc] = Math.abs(dx) > Math.abs(dy) ? [g.r, g.c + Math.sign(dx)] : [g.r + Math.sign(dy), g.c];
   swapCells(g.r, g.c, tr, tc);
 }
-function gEnd(src, id, X, Y, cancel) {
-  if (!gest || gest.src !== src || gest.id !== id) return;
-  if (X != null && !gest.done) gMove(src, id, X, Y);   // fast flick: decide on release
+function gEnd(X, Y) {
+  if (!gest) return;
+  if (X != null) gMove(X, Y);                                  // fast flick: decide on release
   const g = gest; gest = null;
-  if (!g.done && !cancel) tapCell(g.r, g.c);
+  if (!g.done) tapCell(g.r, g.c);
 }
-cv.addEventListener('pointerdown', e => { lastPtrTime = performance.now(); if (gStart('p', e.pointerId, e.clientX, e.clientY)) { e.preventDefault(); try { cv.setPointerCapture(e.pointerId); } catch (_) {} } });
-cv.addEventListener('pointermove', e => { gMove('p', e.pointerId, e.clientX, e.clientY); });
-cv.addEventListener('pointerup', e => gEnd('p', e.pointerId, e.clientX, e.clientY, false));
-cv.addEventListener('pointercancel', e => gEnd('p', e.pointerId, e.clientX, e.clientY, true));
-cv.addEventListener('lostpointercapture', e => { if (gest && gest.src === 'p' && gest.id === e.pointerId) gest = null; });
-// touch fallback: only used when no pointer gesture is running
-const tch = (e, i) => e.changedTouches[i || 0];
-cv.addEventListener('touchstart', e => { e.preventDefault(); if (gest || performance.now() - lastPtrTime < 400) return; const t = tch(e); gStart('t', t.identifier, t.clientX, t.clientY); }, { passive: false });
-cv.addEventListener('touchmove', e => { e.preventDefault(); if (!gest || gest.src !== 't') return; for (const t of e.changedTouches) gMove('t', t.identifier, t.clientX, t.clientY); }, { passive: false });
-cv.addEventListener('touchend', e => { e.preventDefault(); if (!gest || gest.src !== 't') return; for (const t of e.changedTouches) gEnd('t', t.identifier, t.clientX, t.clientY, false); }, { passive: false });
-cv.addEventListener('touchcancel', e => { if (!gest || gest.src !== 't') return; for (const t of e.changedTouches) gEnd('t', t.identifier, t.clientX, t.clientY, true); }, { passive: false });
+cv.addEventListener('pointerdown', e => { if (gStart(e.clientX, e.clientY) && e.pointerType === 'mouse') { try { cv.setPointerCapture(e.pointerId); } catch (_) {} } });
+cv.addEventListener('pointermove', e => gMove(e.clientX, e.clientY));
+cv.addEventListener('pointerup', e => gEnd(e.clientX, e.clientY));
+cv.addEventListener('pointercancel', e => { if (gest) gMove(e.clientX, e.clientY); });   // keep the gesture: touchend will finish it
+const tch = e => e.changedTouches && e.changedTouches[0];
+cv.addEventListener('touchstart', e => { const t = tch(e); if (t) gStart(t.clientX, t.clientY); if (e.cancelable) e.preventDefault(); }, { passive: false });
+cv.addEventListener('touchmove', e => { const t = tch(e); if (t) gMove(t.clientX, t.clientY); if (e.cancelable) e.preventDefault(); }, { passive: false });
+cv.addEventListener('touchend', e => { const t = tch(e); gEnd(t ? t.clientX : null, t ? t.clientY : null); if (e.cancelable) e.preventDefault(); }, { passive: false });
+cv.addEventListener('touchcancel', e => { const t = tch(e); if (t) gMove(t.clientX, t.clientY); setTimeout(() => { if (gest && performance.now() - gest.last > 600) gest = null; }, 700); }, { passive: false });
+// buttons that must react instantly and reliably: fire on release (pointer or touch), ignore the click that follows
+function fastTap(el, fn) {
+  let downAt = 0, fired = 0;
+  const go = e => { const n = performance.now(); if (n - fired < 450) return; fired = n; fn(e); };
+  el.addEventListener('pointerdown', () => { downAt = performance.now(); });
+  el.addEventListener('touchstart', () => { downAt = performance.now(); }, { passive: true });
+  el.addEventListener('pointerup', e => { if (performance.now() - downAt < 1500) go(e); });
+  el.addEventListener('touchend', e => { if (performance.now() - downAt < 1500) { go(e); if (e.cancelable) e.preventDefault(); } }, { passive: false });
+  el.addEventListener('click', go);
+}
+
+// ---------------------------------------------------------------- diagnostics (errors + input log, hidden debug panel)
+const DBG = { ev: [], err: [], t0: Date.now() };
+function dbgPush(list, item, max) { list.push(item); if (list.length > max) list.shift(); }
+function dbgDesc(t) { if (!t || !t.tagName) return String(t); return t.tagName.toLowerCase() + (t.id ? '#' + t.id : '') + (t.className && typeof t.className === 'string' ? '.' + t.className.split(' ')[0] : ''); }
+let dbgLastMove = 0;
+['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'lostpointercapture', 'touchstart', 'touchmove', 'touchend', 'touchcancel', 'click'].forEach(type => document.addEventListener(type, e => {
+  if ((type === 'pointermove' || type === 'touchmove') && Date.now() - dbgLastMove < 120) return; if (type.endsWith('move')) dbgLastMove = Date.now();
+  const p = e.touches ? (e.changedTouches && e.changedTouches[0]) : e;
+  dbgPush(DBG.ev, `${((Date.now() - DBG.t0) / 1000).toFixed(2)} ${type}${e.pointerType ? '(' + e.pointerType + ')' : ''} ${dbgDesc(e.target)} ${p && p.clientX != null ? Math.round(p.clientX) + ',' + Math.round(p.clientY) : ''}${e.defaultPrevented ? ' prevented' : ''}`, 40);
+}, { capture: true, passive: true }));
+function showErr(msg) {
+  dbgPush(DBG.err, `${((Date.now() - DBG.t0) / 1000).toFixed(1)} ${msg}`, 20);
+  try { const t = document.getElementById('errToast'); if (t) { t.textContent = '⚠ エラー: ' + String(msg).slice(0, 140); t.hidden = false; clearTimeout(showErr.t); showErr.t = setTimeout(() => { t.hidden = true; }, 6000); } } catch (e) {}
+}
+window.addEventListener('error', e => showErr((e.message || 'error') + (e.filename ? ' @' + String(e.filename).split('/').pop() + ':' + e.lineno : '')));
+window.addEventListener('unhandledrejection', e => showErr('promise: ' + (e.reason && (e.reason.message || e.reason))));
+function dbgReport() {
+  const lines = [], add = s => lines.push(s);
+  add(`v${VERSION} ${IS_APP ? 'APP(file:)' : 'WEB'} ${location.protocol}`);
+  add(navigator.userAgent);
+  add(`view ${innerWidth}x${innerHeight} dpr ${devicePixelRatio} touch ${navigator.maxTouchPoints || 0} PE ${'PointerEvent' in window} TE ${'ontouchstart' in window}`);
+  add(`screen ${screen} lvl ${LVN} busy ${busy} paused ${paused} mode ${mode} status ${G ? G.status : '-'} gest ${gest ? JSON.stringify(gest) : '-'} ls ${(() => { try { localStorage.setItem('__t', '1'); return 'ok'; } catch (e) { return 'NO'; } })()}`);
+  if (G && screen === 'game') {
+    const hit = (x, y) => dbgDesc(document.elementFromPoint(x, y));
+    const [bx, by] = (() => { const r = cv.getBoundingClientRect(); return [r.left + OX + CS * G.W / 2, r.top + OY + CS * G.H / 2]; })();
+    add(`board centre -> ${hit(bx, by)}; CS ${CS}`);
+    document.querySelectorAll('#boostBar .bst').forEach(b => { const r = b.getBoundingClientRect(); add(`booster ${b.dataset.k} [${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.width)}x${Math.round(r.height)}] -> ${hit(r.left + r.width / 2, r.top + r.height / 2)}`); });
+  }
+  add('--- errors'); DBG.err.forEach(add); add('--- input (latest last)'); DBG.ev.forEach(add);
+  return lines.join('\n');
+}
+function openDebug() { $('dbgText').textContent = dbgReport(); $('ovDebug').hidden = false; }
+let verTaps = [];
+function verTap() { const n = Date.now(); verTaps = verTaps.filter(t => n - t < 2500); verTaps.push(n); if (verTaps.length >= 5) { verTaps = []; openDebug(); } }
 
 // ---------------------------------------------------------------- map menu
 const OBST = [
@@ -797,6 +872,9 @@ $('muTabs').onclick = e => { const b = e.target.closest('button'); if (b) { menu
 $('muJump').onclick = () => { closeMenu(); $('mJump').onclick(); };
 $('muTitle').onclick = () => { SFX.tick(); closeMenu(); show('title'); };
 $('muVer').textContent = `イルカのブラスト v${VERSION}${IS_APP ? '（アプリ版）' : '（WEB版）'}・広告なし・通信なし`;
+$('tVer').addEventListener('click', verTap); $('muVer').addEventListener('click', verTap);
+$('dbgClose').onclick = () => { $('ovDebug').hidden = true; };
+$('dbgRefresh').onclick = () => { $('dbgText').textContent = dbgReport(); };
 $('tVer').textContent = `v${VERSION}${IS_APP ? ' アプリ版' : ''}・タップでも スワイプでも 遊べる！`;
 
 // Android back button support
@@ -807,6 +885,7 @@ window.__blast = {
   cellCenter(r, c) { const r0 = cv.getBoundingClientRect(); const [x, y] = cellXY(r, c); return [r0.left + x, r0.top + y]; },
   back() { // returns true if handled
     if (!$('ovGift').hidden) { $('gOk').click(); return true; }
+    if (!$('ovDebug').hidden) { $('ovDebug').hidden = true; return true; }
     if (!$('ovMenu').hidden) { closeMenu(); return true; }
     if (mode) { setMode(null); return true; }
     if (!$('ovPause').hidden) { resume(); return true; }
@@ -823,7 +902,7 @@ window.__blast = {
   unlockTo(n) { for (let i = 1; i < n; i++) SV.stars[i] = SV.stars[i] || 1; persist(); },
   setInv(o) { Object.assign(SV.inv, o); for (const k in o) SV.got[k] = 1; persist(); if (G) buildBoostBar(); },
   open(n) { openStart(n); },
-  version: VERSION, get bgm() { return BGM && BGM.current; }, appPause() { pause(); persist(); appSleep(true); }, appResume() { appSleep(false); }, skip: skipBonus, get bonusRunning() { return !$('skipBtn').hidden; },
+  version: VERSION, debug: () => dbgReport(), openDebug, get bgm() { return BGM && BGM.current; }, appPause() { pause(); persist(); appSleep(true); }, appResume() { appSleep(false); }, skip: skipBonus, get bonusRunning() { return !$('skipBtn').hidden; },
   mudAt(r, c) { return dispMud && dispMud[r][c]; },
 };
 show('title');

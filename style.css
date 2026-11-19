@@ -223,3 +223,13 @@ body.paused #stage{visibility:hidden}
 #ovLose .stamp{animation:bob 1.6s ease-in-out infinite}
 @media (max-width:370px){.mapttl{font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
 .mapttl{white-space:nowrap}
+
+/* v1.1.2: old-WebView fallbacks for inset, diagnostics */
+.screen,.overlay,#fly{top:0;right:0;bottom:0;left:0}
+#cv{top:0;left:0}
+.dbg{flex:1;min-height:200px;overflow:auto;background:#0d2e6a;color:#cfe3ff;font:11px/1.35 ui-monospace,Menlo,monospace;padding:8px;border-radius:10px;white-space:pre-wrap;word-break:break-all;text-align:left;margin:6px 0;-webkit-user-select:text;user-select:text}
+.errtoast{position:fixed;left:8px;right:8px;top:calc(8px + env(safe-area-inset-top));z-index:300;background:#e8382e;color:#fff;font-weight:800;font-size:13px;padding:8px 12px;border-radius:12px;box-shadow:0 4px 10px rgba(0,0,0,.3);pointer-events:none}
+#tVer,#muVer{cursor:pointer}
+#scGame,#scTitle{touch-action:none}
+#boostBar{touch-action:manipulation}
+html.app #boostBar{padding-bottom:calc(16px + env(safe-area-inset-bottom))}

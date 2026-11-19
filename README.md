@@ -1,7 +1,12 @@
-# イルカのブラスト 〜通信工事するイルカ〜 (v1.1.1)
+# イルカのブラスト 〜通信工事するイルカ〜 (v1.1.2)
 Toon Blast-style tap puzzle (own art/names; dolphin telecom theme). Tap a group of 2+ OR swipe to swap two neighbours.
 Files: index.html, style.css, engine.js (pure game logic, Node-testable), levels.js (30 hand levels + deterministic generator -> 500),
-art.js (procedural canvas sprites), game.js (UI/render/audio/map/boosters), sw.js (cache iruka-blast-v2), manifest.webmanifest, icons/, img/.
+art.js (procedural canvas sprites), game.js (UI/render/audio/map/boosters), sw.js (cache iruka-blast-v4), manifest.webmanifest, icons/, img/.
+
+v1.1.2
+- BGM re-voiced as a 1940s jazz lounge (relaxed swing, warm piano, upright bass, brushes, muted trumpet, tenor sax, clarinet and vibes, with tape and vinyl warmth). Tracks: 港の散歩道 (map), ケーブル・スウィング (levels), 夜勤ノワール (bosses), 休憩所のスロー (breathers). Same shared lounge engine as イルカの上海. See music/README.md.
+- iPhone (web version only): BGM and sound effects play even with the silent switch on. Uses a "playback" audio session plus a silent looping <audio>. Audio resumes on every tap and when the app returns to the front.
+- Updates show up reliably: the service worker revalidates every file (cache: no-cache, cache iruka-blast-v4), assets are versioned (?v=1.1.2), and the page reloads itself once when a new version takes over.
 
 v1.1.1
 - Swipe input rewritten: pointer events plus a raw touch-event fallback. A swipe is decided at 0.3 cell during the move, or on release for a fast flick; a smaller wobble counts as a tap. pointercancel and lostpointercapture are handled.
