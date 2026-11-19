@@ -1,0 +1,17 @@
+{
+  "name": "イルカのブラスト 〜通信工事するイルカ〜",
+  "short_name": "イルカのブラスト",
+  "description": "通信工事するイルカの、広告なしタップ消しパズル",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1b4b9b",
+  "theme_color": "#1b4b9b",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

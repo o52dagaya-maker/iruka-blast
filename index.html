@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#1b4b9b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="イルカのブラスト">
+<title>イルカのブラスト 〜通信工事するイルカ〜</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!-- タイトル -->
+<section id="scTitle" class="screen">
+  <div id="rain" aria-hidden="true"></div>
+  <div class="tbox">
+    <img id="tMascot" src="img/mascot.webp" alt="通信工事のイルカ">
+    <h1 class="logo"><span>イルカの</span><b>ブラスト</b></h1>
+    <p class="sub">〜通信工事するイルカ〜</p>
+    <button class="big" id="tPlay">あそぶ</button>
+    <p class="fine">広告なし・電波がなくても遊べます</p>
+    <p class="ver" id="tVer">v1.1.1・タップでも スワイプでも 遊べる！</p>
+  </div>
+</section>
+
+<!-- マップ -->
+<section id="scMap" class="screen" hidden>
+  <header class="mapbar">
+    <button class="hbtn" id="mBack" aria-label="タイトルへ">◀</button>
+    <div class="mapttl">工事マップ</div>
+    <div class="starsum">★ <b id="starSum">0</b></div>
+    <button class="hbtn" id="mSound" aria-label="効果音">🔊</button>
+    <button class="hbtn" id="mMenu" aria-label="メニュー">☰</button>
+  </header>
+  <div id="mapScroll"><div id="mapInner"></div></div>
+  <button id="mJump" class="jump" hidden>現在地へ</button>
+</section>
+
+<!-- ゲーム -->
+<section id="scGame" class="screen" hidden>
+  <header id="hud">
+    <button class="hbtn" id="gPause" aria-label="一時停止"><svg viewBox="0 0 24 24"><rect x="5" y="4" width="5" height="16" rx="1.5"/><rect x="14" y="4" width="5" height="16" rx="1.5"/></svg></button>
+    <div id="goals" aria-label="目標"></div>
+    <div id="movesBox"><small>手数</small><b id="moves">0</b></div>
+  </header>
+  <div id="lvlLine"><span id="lvlNo"></span><span id="lvlName"></span><span id="score">0</span></div>
+  <div id="stage"><canvas id="cv"></canvas><div id="modeTip"></div></div>
+  <nav id="boostBar" aria-label="ブースター"></nav>
+  <button id="skipBtn" class="skip" hidden>スキップ ⏩</button>
+</section>
+
+<canvas id="fly" aria-hidden="true"></canvas>
+<div id="pal" aria-hidden="true"><img alt=""></div>
+<div id="banner" aria-live="polite"></div>
+
+<!-- レベル開始 -->
+<div class="overlay" id="ovStart" hidden>
+  <div class="panel center">
+    <img class="stamp" id="sStamp" src="img/st/shuppatsu.webp" alt="">
+    <h2 id="sTitle"></h2>
+    <p class="lname" id="sName"></p>
+    <div class="goalrow" id="sGoals"></div>
+    <p class="mv">手数 <b id="sMoves"></b> 回</p>
+    <p class="tip" id="sTip"></p>
+    <div class="stars small" id="sStars"></div>
+    <div id="sPreWrap"><p class="prettl">スタート時に置く道具</p><div class="prerow" id="sPre"></div></div>
+    <button class="big" id="sGo">スタート</button>
+    <button class="big ghost" id="sBack">マップへ</button>
+  </div>
+</div>
+
+<!-- メニュー -->
+<div class="overlay" id="ovMenu" hidden>
+  <div class="panel menu">
+    <div class="mhead"><img src="img/st/yoroshiku.webp" alt=""><h2>メニュー</h2><button class="xbtn" id="muClose" aria-label="とじる">✕</button></div>
+    <div class="tabs" id="muTabs" role="tablist">
+      <button data-t="set" class="on">設定</button><button data-t="how">遊び方</button><button data-t="item">アイテム</button><button data-t="rec">記録</button><button data-t="area">エリア</button>
+    </div>
+    <div class="mbody" id="muBody"></div>
+    <div class="mfoot">
+      <button class="big" id="muJump">現在地へ</button>
+      <button class="big ghost" id="muTitle">タイトルへ</button>
+      <p class="mver" id="muVer"></p>
+    </div>
+  </div>
+</div>
+
+<!-- ごほうび -->
+<div class="overlay" id="ovGift" hidden>
+  <div class="panel center">
+    <img class="stamp bounce" src="img/st/arigato.webp" alt="">
+    <h2 id="gTitle">ごほうび！</h2>
+    <p id="gMsg"></p>
+    <div class="goalrow" id="gItems"></div>
+    <button class="big" id="gOk">OK</button>
+  </div>
+</div>
+
+<!-- 一時停止 -->
+<div class="overlay" id="ovPause" hidden>
+  <div class="panel center">
+    <img class="stamp" src="img/st/kyukei.webp" alt="">
+    <h2>一時停止中</h2>
+    <button class="big" id="pResume">再開</button>
+    <button class="big ghost" id="pRetry">やり直し</button>
+    <button class="big ghost" id="pMap">マップへ</button>
+    <label class="toggle"><input type="checkbox" id="pSound"> 効果音</label>
+  </div>
+</div>
+
+<!-- クリア -->
+<div class="overlay" id="ovWin" hidden>
+  <div class="panel center win">
+    <img class="stamp bounce" src="img/st/kanryo.webp" alt="">
+    <h2 id="wTitle"></h2>
+    <div class="stars" id="wStars"><i></i><i></i><i></i></div>
+    <p class="score">スコア <b id="wScore">0</b><span id="wBest"></span></p>
+    <div id="wGift" class="giftline"></div>
+    <button class="big" id="wNext">次のレベルへ</button>
+    <button class="big ghost" id="wMap">マップへ</button>
+  </div>
+</div>
+
+<!-- 失敗 -->
+<div class="overlay" id="ovLose" hidden>
+  <div class="panel center">
+    <img class="stamp" src="img/st/otsukare.webp" alt="">
+    <h2 class="postpone" id="lTitle">工事延期…</h2>
+    <p>手数がなくなりました。あと少し！のこりの目標</p>
+    <div class="goalrow" id="lGoals"></div>
+    <button class="big" id="lRetry">もう一度</button>
+    <button class="big ghost" id="lMap">マップへ</button>
+  </div>
+</div>
+
+<script src="engine.js"></script>
+<script src="levels.js"></script>
+<script src="art.js"></script>
+<script src="music.js"></script>
+<script src="game.js"></script>
+<script>
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(() => {}));
+}
+</script>
+</body>
+</html>
