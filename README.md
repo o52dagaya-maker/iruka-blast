@@ -1,7 +1,13 @@
-# イルカのブラスト 〜通信工事するイルカ〜 (v1.1.2)
+# イルカのブラスト 〜通信工事するイルカ〜 (v1.1.3)
 Toon Blast-style tap puzzle (own art/names; dolphin telecom theme). Tap a group of 2+ OR swipe to swap two neighbours.
 Files: index.html, style.css, engine.js (pure game logic, Node-testable), levels.js (30 hand levels + deterministic generator -> 500),
-art.js (procedural canvas sprites), game.js (UI/render/audio/map/boosters), sw.js (cache iruka-blast-v4), manifest.webmanifest, icons/, img/.
+art.js (procedural canvas sprites), game.js (UI/render/audio/map/boosters), sw.js (cache iruka-blast-v5), manifest.webmanifest, icons/, img/.
+
+v1.1.3
+- Fixed taps and swipes landing on the wrong cell. The board was measured before the goal bar and item bar were built, so the canvas was drawn squeezed (e.g. 734px drawn into 675px on a 390x844 phone) while touches were mapped with the unsqueezed size: up to about one row off toward the bottom of the board. The board is now measured after the HUD and item bar exist, re-measured whenever #stage changes size (ResizeObserver, visualViewport), and touch points are scaled by the canvas's real on-screen size.
+- Item (booster) buttons: the bar is no longer rebuilt under the finger (that made the following click toggle the item straight back off); one tap = one toggle; a tap while blocks are falling is applied as soon as the board settles; 0 left / locked still shows a message.
+- Regression test tools/blast_grid.js: real-touch taps at every cell centre and near every cell edge, 4-way swipes, item buttons, overlay checks, on 13 phone/tablet/landscape/safe-area configurations (Chromium + WebKit).
+- Diagnostics (tap the version label 5 times) now show canvas size vs layout size and the last resolved cell.
 
 v1.1.2
 - BGM re-voiced as a 1940s jazz lounge (relaxed swing, warm piano, upright bass, brushes, muted trumpet, tenor sax, clarinet and vibes, with tape and vinyl warmth). Tracks: 港の散歩道 (map), ケーブル・スウィング (levels), 夜勤ノワール (bosses), 休憩所のスロー (breathers). Same shared lounge engine as イルカの上海. See music/README.md.

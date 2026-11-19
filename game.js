@@ -11,7 +11,7 @@ const ease = { lin: k => k, out: k => 1 - (1 - k) * (1 - k), inq: k => k * k, ba
 // ---------------------------------------------------------------- save
 const SAVE_KEY = 'irukaBlast.v1';
 const DEF = () => ({ stars: {}, best: {}, sound: true, bgm: true, bgmVol: 0.6, vib: true, fx: 'full', fast: false, inv: {}, got: {}, chest: 0 });
-const VERSION = '1.1.2', IS_APP = location.protocol === 'file:';
+const VERSION = '1.1.3', IS_APP = location.protocol === 'file:';
 if (IS_APP) document.documentElement.classList.add('app');
 function loadSave() { try { const v = Object.assign(DEF(), JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')); v.inv = v.inv || {}; v.got = v.got || {}; return v; } catch (e) { return DEF(); } }
 let SV = loadSave();
@@ -234,6 +234,10 @@ function resize() {
   }
 }
 window.addEventListener('resize', () => { if (screen === 'game') resize(); else if (screen === 'map') buildMap(); });
+// v1.1.3: re-measure whenever #stage itself changes size (goal bar wraps, booster bar appears, iOS toolbars, safe areas)
+function fitCheck() { if (screen !== 'game' || !G) return; const r = $('stage').getBoundingClientRect(); if (r.width > 0 && r.height > 0 && (Math.abs(r.width - VW) > 0.5 || Math.abs(r.height - VH) > 0.5)) resize(); }
+if (window.ResizeObserver) { let fq = 0; new ResizeObserver(() => { if (!fq) fq = requestAnimationFrame(() => { fq = 0; fitCheck(); }); }).observe($('stage')); }
+if (window.visualViewport) visualViewport.addEventListener('resize', fitCheck);
 function buildBg() {
   bg = document.createElement('canvas'); bg.width = Math.ceil((CS * G.W + 24) * DPR); bg.height = Math.ceil((CS * G.H + 24) * DPR);
   const x = bg.getContext('2d'); x.scale(DPR, DPR); x.translate(12, 12);
@@ -528,6 +532,7 @@ function startLevel(n, seed, pre) {
   dispGoals = Object.assign({}, G.goals); lowWarned = false; busy = false; paused = false; document.body.classList.remove('paused');
   sprites.clear(); ghosts = []; parts = []; fxs = []; flyers = []; texts = []; tweens.forEach(w => w.res()); tweens = []; clearHint();
   show('game'); buildHud(); syncAll(); buildBoostBar();
+  resize();   // v1.1.3: measure the board AFTER the HUD/goal bar and booster bar exist (they shrink #stage)
   // drop-in intro
   const myId = playId; busy = true;
   for (const s of sprites.values()) { const r1 = s.r; s.r = r1 - G.H - 1; tween(420, k => s.r = r1 - (G.H + 1) * (1 - k), (G.W - s.c) * 18 + (G.H - r1) * 10, ease.out).then(() => s.land = clock); }
@@ -582,19 +587,33 @@ const itemImg = k => ICON[k] ? `<span class="ico">${ICON[k]}</span>` : `<img src
 const reached = () => Math.max(unlocked(), LVN);
 const inv = k => SV.inv[k] || 0;
 function buildBoostBar() {
-  const bar = $('boostBar'); bar.innerHTML = '';
-  for (const k in BOOST) {
-    const b = document.createElement('button'), ok = reached() >= BOOST[k].u; b.className = 'bst' + (ok ? '' : ' lock') + (mode === k ? ' on' : '') + (ok && !inv(k) ? ' zero' : ''); b.dataset.k = k;
-    b.innerHTML = ICON[k] + `<span>${BOOST[k].n}</span>` + (ok ? `<span class="n">${inv(k)}</span>` : `<span class="n">🔒</span>`);
-    fastTap(b, () => pickBoost(k)); bar.appendChild(b);
+  // v1.1.3: buttons are created once and then only updated in place. Rebuilding them while a finger is still down
+  // put a NEW button under the finger, so the click that follows the tap toggled the item straight back off.
+  const bar = $('boostBar'), keys = Object.keys(BOOST);
+  if (bar.children.length !== keys.length || keys.some((k, i) => bar.children[i].dataset.k !== k)) {
+    bar.innerHTML = '';
+    for (const k of keys) { const b = document.createElement('button'); b.type = 'button'; b.dataset.k = k; fastTap(b, () => pickBoost(k)); bar.appendChild(b); }
+  }
+  for (const b of bar.children) {
+    const k = b.dataset.k, ok = reached() >= BOOST[k].u, cls = 'bst' + (ok ? '' : ' lock') + (mode === k ? ' on' : '') + (ok && !inv(k) ? ' zero' : '');
+    const html = ICON[k] + `<span>${BOOST[k].n}</span>` + (ok ? `<span class="n">${inv(k)}</span>` : `<span class="n">🔒</span>`);
+    if (b.className !== cls) b.className = cls;
+    if (b._h !== html) { b.innerHTML = html; b._h = html; }
+    b.setAttribute('aria-pressed', mode === k ? 'true' : 'false');
   }
 }
 function setMode(m) { mode = m; const t = $('modeTip'); t.textContent = m ? BOOST[m].tip + '（もう一度押すとやめる）' : ''; t.classList.toggle('show', !!m); buildBoostBar(); }
+let lastPick = { k: null, t: 0 };
 async function pickBoost(k) {
+  const now = performance.now(); if (lastPick.k === k && now - lastPick.t < 400) return; lastPick = { k, t: now };   // one tap = one toggle, whatever events follow
   if (!G || paused || G.status !== 'play') return;
   if (reached() < BOOST[k].u) { SFX.bonk(); toast(`レベル${BOOST[k].u}で使えるようになるよ`); return; }
-  if (busy) return;
   if (mode === k) { SFX.tick(); setMode(null); return; }
+  if (busy) {   // v1.1.3: don't silently drop the tap while blocks are still falling; apply it as soon as the board settles
+    const id = playId, t0 = performance.now();
+    while (busy && performance.now() - t0 < 4000) await new Promise(r => setTimeout(r, 50));
+    if (busy || id !== playId || !G || paused || G.status !== 'play' || mode === k) return;
+  }
   if (!inv(k)) { SFX.bonk(); toast('もう持っていないよ。ボスや★宝箱でもらえるよ'); return; }
   SFX.tick();
   if (k === 'mix') { const ph = G.mix(); if (!ph) { SFX.bonk(); return; } ph[0].manual = 1; SV.inv.mix--; persist(); setMode(null); clearHint(); return runPhases(ph); }
@@ -731,15 +750,15 @@ function appSleep(v) { try { if (v) iosSessionSleep(); if (BGM) BGM.pause(v || p
 // either stream updates it, and the first release finishes it. So if a WebView cancels or drops one stream
 // (pointercancel, lost capture, missing pointermove), the other one still completes the swipe.
 const SWIPE = 0.3;
-let gest = null;
-const xyOf = (cx0, cy0) => { const r0 = cv.getBoundingClientRect(); const x = cx0 - r0.left, y = cy0 - r0.top; return [Math.floor((y - OY) / CS), Math.floor((x - OX) / CS), x, y]; };
+let gest = null, lastIn = null, probe = false;   // probe: tests resolve cells without playing them   // lastIn: last resolved cell/swipe target (diagnostics + regression test)
+const xyOf = (cx0, cy0) => { fitCheck(); const r0 = cv.getBoundingClientRect(); const x = (cx0 - r0.left) * (r0.width ? VW / r0.width : 1), y = (cy0 - r0.top) * (r0.height ? VH / r0.height : 1); return [Math.floor((y - OY) / CS), Math.floor((x - OX) / CS), x, y]; };
 function gStart(X, Y) {
   if (!$('skipBtn').hidden) { skipBonus(); return false; }
   const now = performance.now();
   if (gest && now - gest.last < 700) return true;            // same finger, reported by the other stream
   if (!G) return false; const [r, c, x, y] = xyOf(X, Y);
   if (r < 0 || c < 0 || r >= G.H || c >= G.W) { gest = null; return false; }
-  gest = { r, c, x, y, done: false, last: now }; hover = [r, c]; return true;
+  gest = { r, c, x, y, done: false, last: now }; hover = [r, c]; lastIn = { r, c, swipe: null }; return true;
 }
 function gMove(X, Y) {
   const [r, c, x, y] = xyOf(X, Y); if (mode) hover = [r, c];
@@ -748,13 +767,14 @@ function gMove(X, Y) {
   if (Math.abs(dx) < th && Math.abs(dy) < th) return;
   gest.done = true; const g = gest;
   const [tr, tc] = Math.abs(dx) > Math.abs(dy) ? [g.r, g.c + Math.sign(dx)] : [g.r + Math.sign(dy), g.c];
-  swapCells(g.r, g.c, tr, tc);
+  if (lastIn) lastIn.swipe = [tr, tc];
+  if (!probe) swapCells(g.r, g.c, tr, tc);
 }
 function gEnd(X, Y) {
   if (!gest) return;
   if (X != null) gMove(X, Y);                                  // fast flick: decide on release
   const g = gest; gest = null;
-  if (!g.done) tapCell(g.r, g.c);
+  if (!g.done && !probe) tapCell(g.r, g.c);
 }
 cv.addEventListener('pointerdown', e => { if (gStart(e.clientX, e.clientY) && e.pointerType === 'mouse') { try { cv.setPointerCapture(e.pointerId); } catch (_) {} } });
 cv.addEventListener('pointermove', e => gMove(e.clientX, e.clientY));
@@ -800,6 +820,7 @@ function dbgReport() {
   add(`screen ${screen} lvl ${LVN} busy ${busy} paused ${paused} mode ${mode} status ${G ? G.status : '-'} gest ${gest ? JSON.stringify(gest) : '-'} ls ${(() => { try { localStorage.setItem('__t', '1'); return 'ok'; } catch (e) { return 'NO'; } })()}`);
   if (G && screen === 'game') {
     const hit = (x, y) => dbgDesc(document.elementFromPoint(x, y));
+    { const r = cv.getBoundingClientRect(); add(`canvas css ${Math.round(r.width)}x${Math.round(r.height)} vs layout ${Math.round(VW)}x${Math.round(VH)}${Math.abs(r.height - VH) > 1 || Math.abs(r.width - VW) > 1 ? ' MISMATCH' : ' ok'}; last cell ${JSON.stringify(lastIn)}`); }
     const [bx, by] = (() => { const r = cv.getBoundingClientRect(); return [r.left + OX + CS * G.W / 2, r.top + OY + CS * G.H / 2]; })();
     add(`board centre -> ${hit(bx, by)}; CS ${CS}`);
     document.querySelectorAll('#boostBar .bst').forEach(b => { const r = b.getBoundingClientRect(); add(`booster ${b.dataset.k} [${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.width)}x${Math.round(r.height)}] -> ${hit(r.left + r.width / 2, r.top + r.height / 2)}`); });
@@ -882,6 +903,7 @@ window.__blast = {
   get G() { return G; }, get busy() { return busy; }, get screen() { return screen; }, get paused() { return paused; }, get level() { return LVN; }, get score() { return score; },
   set speed(v) { SPD = v; }, get speed() { return SPD; },
   start: (n, seed, pre) => { closeOverlays(); startLevel(n, seed, pre); }, tap: tapCell, swap: swapCells, boost: pickBoost, get mode() { return mode; }, pause, resume, save: persist, get inv() { return SV.inv; },
+  get lastIn() { return lastIn; }, set probe(v) { probe = !!v; },
   cellCenter(r, c) { const r0 = cv.getBoundingClientRect(); const [x, y] = cellXY(r, c); return [r0.left + x, r0.top + y]; },
   back() { // returns true if handled
     if (!$('ovGift').hidden) { $('gOk').click(); return true; }
