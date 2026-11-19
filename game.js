@@ -11,7 +11,7 @@ const ease = { lin: k => k, out: k => 1 - (1 - k) * (1 - k), inq: k => k * k, ba
 // ---------------------------------------------------------------- save
 const SAVE_KEY = 'irukaBlast.v1';
 const DEF = () => ({ stars: {}, best: {}, sound: true, bgm: true, bgmVol: 0.6, vib: true, fx: 'full', fast: false, inv: {}, got: {}, chest: 0 });
-const VERSION = '1.1.3', IS_APP = location.protocol === 'file:';
+const VERSION = '1.1.5', IS_APP = location.protocol === 'file:';
 if (IS_APP) document.documentElement.classList.add('app');
 function loadSave() { try { const v = Object.assign(DEF(), JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')); v.inv = v.inv || {}; v.got = v.got || {}; return v; } catch (e) { return DEF(); } }
 let SV = loadSave();

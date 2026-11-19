@@ -34,7 +34,7 @@ function arrange(tr) {
   const choruses = tr.lead2 ? 2 : 1, total = beats * choruses;
   for (let ch = 0; ch < choruses; ch++) {
     const o = ch * beats, lead = ch ? tr.lead2 : tr.lead, oct = (ch ? tr.oct2 : tr.oct) || 0;
-    tr.melody.notes.forEach(n => ev.push({ t: o + n.t, i: lead, m: n.m + T + oct, d: n.d, v: ch ? .8 : .9 }));
+    tr.melody.notes.forEach(n => ev.push({ t: o + n.t, i: lead, m: n.m + T + oct, d: n.d, v: (ch ? .8 : .9) * (tr.lv || 1) }));
     if (tr.counter) tr.counter.notes.forEach(n => ev.push({ t: o + n.t, i: tr.counterInst || 'clarinet', m: n.m + T, d: n.d, v: .5 }));
   }
   // bass
@@ -42,8 +42,8 @@ function arrange(tr) {
   const near = (pc, lo, hi) => { let best = null; for (let m = lo; m <= hi; m++) if (((m % 12) + 12) % 12 === pc && (best === null || Math.abs(m - prev) < Math.abs(best - prev))) best = m; return best; };
   for (let beat = 0; beat < total; beat++) {
     const b = beat % beats, c = chordAt(b), nx = chordAt((b + 1) % beats), pos = b % 4, two = perBar[Math.floor(b / 4) % nb].length > 1;
-    if (tr.style === 'ballad' || tr.style === 'tag' || (tr.style === 'slow' && beat < beats)) {
-      if (pos === 0 || pos === 2) { const pc = pos === 0 || two ? c.bass : (c.root + c.iv[2]) % 12; const m = near(pc, 31, 48); prev = m; ev.push({ t: beat, i: 'bass', m, d: 1.85, v: .8 }); }
+    if (tr.style === 'ballad' || tr.style === 'tag' || tr.style === 'mellow' || (tr.style === 'slow' && beat < beats)) {
+      if (pos === 0 || pos === 2) { const pc = pos === 0 || two ? c.bass : (c.root + c.iv[2]) % 12; const m = near(pc, 31, 48); prev = m; ev.push({ t: beat, i: 'bass', m, d: 1.85, v: tr.style === 'mellow' ? .62 : .8 }); }
     } else {
       let pc; const changes = nx !== c || pos === 3;
       if (pos === 0 || (two && pos === 2)) pc = c.bass;
@@ -58,7 +58,11 @@ function arrange(tr) {
   for (let ch = 0; ch < choruses; ch++) perBar.forEach((cs, b) => cs.forEach((c, k) => {
     const t0 = ch * beats + b * 4 + k * (4 / cs.length), lp = leadIsPiano(ch), vs = voicing(c, lp ? 50 : 53, lp ? 62 : 69, tr.style === 'ballad' || tr.style === 'tag' ? 4 : 3);
     const vv = lp ? .55 : 1;
-    if (tr.style === 'ballad' || tr.style === 'tag' || tr.style === 'slow') {
+    if (tr.style === 'mellow') {
+      const v4 = voicing(c, lp ? 50 : 52, lp ? 62 : 67, 4);
+      v4.forEach((m, j) => ev.push({ t: t0 + j * .22, i: 'piano', m, d: cs.length > 1 ? 1.9 : 3.8, v: .2 * vv }));
+      if (cs.length === 1 && !lp) [1.5, 2.5, 3.5].forEach((h, j) => { if (rnd() < .7) ev.push({ t: t0 + h, i: 'piano', m: v4[(j + 1) % v4.length] + 12, d: 1.2, v: .09 }); });
+    } else if (tr.style === 'ballad' || tr.style === 'tag' || tr.style === 'slow') {
       vs.forEach((m, j) => ev.push({ t: t0 + j * .18, i: 'piano', m, d: cs.length > 1 ? 1.9 : 3.8, v: .3 * vv }));
       if (cs.length === 1 && !lp) ev.push({ t: t0 + 2.5, i: 'piano', m: vs[vs.length - 1] + 12, d: 1.4, v: .14 });
     } else if (tr.style === 'noir') {
@@ -70,6 +74,11 @@ function arrange(tr) {
   // drums: brushes, soft ride, hi-hat on 2 & 4, feathered kick
   for (let beat = 0; beat < total; beat++) {
     const pos = beat % 4;
+    if (tr.style === 'mellow') {
+      if (pos % 2 === 0) ev.push({ t: beat, i: 'swish', d: 2, v: .36 });
+      if (pos === 1 || pos === 3) ev.push({ t: beat, i: 'hat', v: .16 });
+      continue;
+    }
     if (tr.style === 'ballad' || tr.style === 'tag' || (tr.style === 'slow' && beat < beats)) {
       if (pos % 2 === 0) ev.push({ t: beat, i: 'swish', d: 2, v: .55 });
       if (pos === 1 || pos === 3) { ev.push({ t: beat, i: 'tap', v: .3 }); ev.push({ t: beat, i: 'hat', v: .35 }); }
@@ -188,7 +197,7 @@ function makeMaster(ctx, dest) {
     if (on && !hissSrc) { const b = ctx.createBuffer(1, sr * 2, sr), d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; hissSrc = ctx.createBufferSource(); hissSrc.buffer = b; hissSrc.loop = true; const g = ctx.createGain(); g.gain.value = .0035; const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 3500; f.Q.value = .5; hissSrc.connect(f); f.connect(g); g.connect(lp); hissSrc.start(); }
     else if (!on && hissSrc) { try { hissSrc.stop(); } catch (e) {} hissSrc = null; }
   };
-  return { dry, wet, out, hiss };
+  return { dry, wet, out, hiss, lp };
 }
 
 /* ---------------- sequencer core (shared by both games' players) ---------------- */
@@ -204,7 +213,7 @@ function Core(TRACKS) {
     [fade, wet].forEach(g => { g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(1, t + (fadeIn || .05)); });
     fade.connect(M.dry); wet.connect(M.wet);
     cur = { id, tr, fade, wet, inst: Engine(ctx, fade, wet), arr: ARR[id], spb: 60 / tr.bpm, loopStart: t + .12, idx: 0, loops: 0 };
-    onEnd = endCb || null; M.hiss(true);
+    onEnd = endCb || null; M.hiss(true); M.lp.frequency.setTargetAtTime(tr.lp || 7200, t, .3);
     tick(); if (!timer) timer = setInterval(tick, 50);
   }
   function stopCur(sec) {
@@ -235,7 +244,7 @@ function Core(TRACKS) {
   function render(id, secs, sr, only) {
     const OC = window.OfflineAudioContext || window.webkitOfflineAudioContext; sr = sr || 22050;
     const oc = new OC(2, Math.ceil(sr * secs), sr), g = oc.createGain(); g.gain.value = 1.05 * .5; g.connect(oc.destination);
-    const m = makeMaster(oc, g), tr = TRACKS[id], arr = ARR[id], inst = Engine(oc, m.dry, m.wet), spb = 60 / tr.bpm; m.hiss(true);
+    const m = makeMaster(oc, g), tr = TRACKS[id], arr = ARR[id], inst = Engine(oc, m.dry, m.wet), spb = 60 / tr.bpm; m.hiss(true); m.lp.frequency.value = tr.lp || 7200;
     for (let loop = 0; loop * arr.beats * spb < secs; loop++) { arr.ev.forEach(e => { if (only && only.indexOf(e.i) < 0) return; const at = loop * arr.beats * spb + swingT(e.t, tr.swing) * spb + .05; if (at < secs - .1) inst[e.i](at, e.m, (e.d || .5) * spb, e.v); }); if (tr.once) break; }
     if (!only) for (let t = .2; t < secs; t += .25 + Math.random() * .5) inst.crackle(t); else m.hiss(false);
     return oc.startRendering ? new Promise((res, rej) => { const p = oc.startRendering(); if (p && p.then) p.then(res, rej); else oc.oncomplete = e => res(e.renderedBuffer); }) : null;
@@ -251,25 +260,28 @@ function Core(TRACKS) {
 
 /* ---- イルカのブラスト: tracks (original compositions; melodies in swung eighths) ---- */
 const TRACKS = {
-  map: { title: '港の散歩道', name: '港の散歩道', en: 'Harbor Stroll (lounge swing)', bpm: 112, swing: .64, key: 'F major', style: 'swing', lead: 'clarinet', oct: -12, lead2: 'piano',
-    chords: ['F6', 'D7', 'Gm7', 'C7', 'F6', 'F7', 'Bb6', 'Bdim', 'F6/C', 'D7', 'G7', 'C7', 'F6', 'D7', 'Gm7 C7', 'F6'],
-    melody: melE(['C5:3 A4:1 C5:2 D5:2', 'F#5:3 E5:1 D5:2 C5:2', 'Bb4:2 D5:2 F5:3 E5:1', 'E5:2 D5:1 C5:1 Bb4:2 G4:2',
-          'A4:3 C5:1 F5:2 E5:2', 'Eb5:4 D5:1 C5:1 A4:2', 'D5:3 Bb4:1 G4:2 D5:2', 'D5:2 F5:2 Ab5:3 G5:1',
-          'A5:2 F5:2 C5:3 D5:1', 'C5:2 A4:2 F#4:2 A4:2', 'B4:3 D5:1 F5:2 E5:2', 'E5:2 G5:2 Bb5:2 G5:1 E5:1',
-          'F5:3 D5:1 C5:2 A4:2', 'F#4:2 A4:1 C5:1 D5:2 F#5:2', 'G5:2 F5:2 E5:2 C5:2', 'F5:6 r:2']) },
-  level: { title: 'ケーブル・スウィング', name: 'ケーブル・スウィング', en: 'Cable Swing (lounge medium-up swing)', bpm: 124, swing: .62, key: 'C major', style: 'swing', lead: 'trumpet', oct: -12, lead2: 'vibes',
+  map: { title: '港あかりの交換台', name: '港あかりの交換台', en: 'Switchboard by the Harbor Lights (1940s lounge ballad)', bpm: 72, swing: .58, key: 'B♭ major', style: 'mellow', lv: .7, lp: 4600,
+    lead: 'trumpet', lead2: 'piano', counterInst: 'clarinet',
+    chords: bars('Bbmaj7 Gm7 | Cm7 F7 | Dm7 G7 | Cm7 F7 | Fm7 Bb7 | Ebmaj7 | Ebm6 | Dm7 G7 | Cm7 | F7 | Dm7 G7 | Cm7 F7 | Bbmaj7 Bdim | Cm7 F7 | Bb6 G7 | Cm7 F7'),
+    melody: mel(`D5:1.5 C5:.5 Bb4:1 G4:1  Eb5:2 D5:.5 C5:.5 A4:1  F5:1.5 E5:.5 D5:1 B4:1  C5:3 r:1
+      Ab4:1 C5:1 Eb5:1 D5:1  G5:3 F5:1  Gb5:1.5 F5:.5 Eb5:1 C5:1  D5:2 B4:1 r:1
+      Eb5:1 G5:1 Bb5:1.5 A5:.5  G5:1 F5:1 Eb5:1 C5:1  F5:1.5 D5:.5 A4:1 B4:1  C5:1 Eb5:1 G5:1 F5:1
+      D5:2 F5:1 Ab5:1  G5:1.5 Eb5:.5 C5:1 A4:1  Bb4:2 B4:1 D5:1  C5:1 Eb5:1 D5:1 C5:1`),
+    counter: mel(`r:2 F4:2  G4:2 A4:2  A4:2 G4:2  r:1 G4:1 A4:1 Bb4:1  C5:2 Ab4:2  Bb4:4  Bb4:2 Gb4:2  F4:2 F4:2
+      G4:4  A4:2 Eb4:2  D4:2 F4:2  G4:2 A4:2  F4:2 Ab4:2  G4:2 Eb4:2  D4:2 F4:2  Eb4:2 A4:2`) },
+  level: { title: '夕凪ケーブル', name: '夕凪ケーブル', en: 'Evening-Calm Cable (mellow slow swing)', bpm: 82, swing: .6, key: 'C major', style: 'mellow', lv: .78, lp: 5600, lead: 'piano', lead2: 'vibes',
     chords: ['C6', 'C6', 'G7', 'G7', 'G7', 'G7', 'C6', 'C6', 'E7', 'E7', 'Am7', 'Am7', 'D7', 'G7', 'C6', 'G7'],
     melody: melE(['E5:1 G5:2 E5:1 C5:2 G4:2', 'A4:1 C5:2 E5:1 G5:3 r:1', 'F5:1 D5:2 B4:1 G4:2 B4:2', 'D5:1 F5:2 G5:1 F5:2 D5:2',
           'B4:1 D5:2 F5:1 A5:2 G5:2', 'F5:2 E5:1 D5:1 B4:2 G4:2', 'C5:1 E5:2 G5:1 C6:3 r:1', 'B5:1 A5:1 G5:2 E5:2 C5:2',
           'G#4:1 B4:2 D5:1 E5:2 G#5:2', 'B5:3 G#5:1 E5:2 D5:2', 'C5:1 E5:2 A5:1 C6:2 A5:2', 'G#5:1 A5:2 E5:1 C5:2 A4:2',
           'F#5:1 A5:2 F#5:1 D5:2 C5:2', 'B4:1 D5:2 G5:1 F5:2 D5:2', 'E5:1 G5:2 C6:1 G5:2 E5:2', 'D5:2 B4:2 G4:2 r:2']) },
-  boss: { title: '夜勤ノワール', name: '夜勤ノワール', en: 'Night-Shift Noir (minor swing)', bpm: 132, swing: .63, key: 'D minor', style: 'noir', lead: 'sax', oct: -12, lead2: 'trumpet', oct2: -12,
+  boss: { title: '夜勤ノクターン', name: '夜勤ノクターン', en: 'Night-Shift Nocturne (mellow minor ballad)', bpm: 70, swing: .6, key: 'D minor', style: 'mellow', lv: .72, lp: 4800, lead: 'sax', oct: -12, lead2: 'piano',
     chords: ['Dm6', 'Dm6', 'Gm7', 'Gm7', 'A7', 'A7', 'Dm6', 'A7', 'Dm6', 'D7', 'Gm7', 'Gm7', 'Dm6/A', 'E7 A7', 'Dm6', 'A7'],
     melody: melE(['D5:2 F5:1 A5:1 r:1 A5:1 G5:1 F5:1', 'E5:1 F5:1 D5:2 A4:4', 'G4:1 Bb4:1 D5:1 G5:2 F5:1 D5:2', 'Bb5:3 A5:1 G5:2 D5:2',
           'C#5:1 E5:1 G5:1 A5:2 G5:1 E5:2', 'Bb5:2 A5:1 G5:1 E5:2 C#5:2', 'D5:1 F5:1 A5:1 D6:3 r:2', 'C#6:1 Bb5:1 A5:1 G5:1 E5:2 C#5:2',
           'A5:2 F5:1 D5:1 A5:2 F5:2', 'F#5:1 A5:1 C6:2 A5:2 F#5:2', 'G5:3 Bb5:1 D6:2 Bb5:2', 'A5:1 G5:1 F5:1 D5:1 Bb4:2 G4:2',
           'A4:1 D5:1 F5:1 A5:3 G5:1 F5:1', 'E5:1 G#5:1 B5:2 C#6:1 Bb5:1 G5:2', 'F5:1 E5:1 D5:2 A4:2 D5:2', 'E5:2 C#5:2 A4:3 r:1']) },
-  rest: { title: '休憩所のスロー', name: '休憩所のスロー', en: 'Break-Room Slow (slow lounge swing)', bpm: 86, swing: .62, key: 'G major', style: 'slow', lead: 'vibes', lead2: 'clarinet', oct2: -12,
+  rest: { title: '休憩所のスロー', name: '休憩所のスロー', en: 'Break-Room Slow (lullaby-slow lounge)', bpm: 60, swing: .6, key: 'G major', style: 'mellow', lv: .75, lp: 4600, lead: 'vibes', lead2: 'clarinet', oct2: -12,
     chords: ['G6', 'G6', 'C6', 'C6', 'G6', 'E7', 'A7', 'D7', 'G6', 'G7', 'C6', 'C#dim', 'G6/D', 'E7', 'A7 D7', 'G6'],
     melody: melE(['B4:2 D5:2 E5:3 D5:1', 'B4:1 A4:1 G4:2 r:4', 'E5:2 G5:2 A5:3 G5:1', 'E5:1 D5:1 C5:2 r:4',
           'D5:3 B4:1 D5:2 G5:2', 'G#5:3 E5:1 D5:2 B4:2', 'C#5:2 E5:2 G5:2 E5:2', 'F#5:4 r:2 D5:2',

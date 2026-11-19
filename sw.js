@@ -1,4 +1,4 @@
-const CACHE = 'iruka-blast-v5';
+const CACHE = 'iruka-blast-v7';
 const FILES = ['./', 'index.html', 'style.css', 'engine.js', 'levels.js', 'art.js', 'music.js', 'game.js', 'manifest.webmanifest', 'img/mascot.webp', 'img/st/anzendaiichi.webp', 'img/st/arigato.webp', 'img/st/chui.webp', 'img/st/hokoku.webp', 'img/st/kakunin.webp', 'img/st/kanryo.webp', 'img/st/kyukei.webp', 'img/st/modorimashita.webp', 'img/st/ohayo.webp', 'img/st/osakini.webp', 'img/st/otsukare.webp', 'img/st/ryokai.webp', 'img/st/shinkochu.webp', 'img/st/shochi.webp', 'img/st/shuppatsu.webp', 'img/st/taio.webp', 'img/st/tochaku.webp', 'img/st/yoroshiku.webp', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => {
